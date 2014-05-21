@@ -1,0 +1,28 @@
+{
+  "name": "grunt-pjs",
+  "description": "Preprocess JS build task for Grunt",
+  "version": "0.1.0",
+  "homepage": "https://github.com/ashi009/grunt-pjs",
+  "author": "Xiaoyi Shi <ashi009@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/ashi009/grunt-pjs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ashi009/grunt-pjs/issues"
+  },
+  "engines": {
+    "node": ">= 0.8.0"
+  },
+  "dependencies": {
+    "async": "^0.9.0",
+    "chalk": "^0.4.0",
+    "source-map": "^0.1.33"
+  },
+  "peerDependencies": {
+    "grunt": "^0.4.5"
+  },
+  "keywords": [
+    "gruntplugin", "pjs"
+  ]
+}
