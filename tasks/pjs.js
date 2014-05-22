@@ -24,34 +24,9 @@ function arrayToObject(arr) {
 }
 
 var kKeywords = arrayToObject('break case catch continue debugger default delete do else finally for function if in instanceof new return switch this throw try typeof var void while with'.split(' '));
-var kMappingInfoPattern = /\{(P:[^{}]+)\}/g;
+var kMappingInfoPattern = /\{P:([^;]+);F:[^;]+;L:(\d+);C:(\d+)[^{}]+\}/g;
 var kIndentPattern = /^[^{]*/;
 var kSymbolPattern = /^[$_a-z][$\w]*/i;
-
-function parseMappingInfo(str) {
-
-  var info = {};
-
-  str.split(';').forEach(function(kv) {
-    var index = kv.indexOf(':');
-    var key = kv.substr(0, index);
-    var value = kv.substr(index + 1);
-    switch (key) {
-      case 'P':
-        info.file = value;
-        break;
-      case 'L':
-        info.line = parseInt(value, 10);
-        break;
-      case 'C':
-        info.column = parseInt(value, 10) - 1;
-        break;
-    }
-  });
-
-  return info;
-
-}
 
 function extractSourceMap(source, map, destFilePath, mapFilePath) {
 
@@ -69,7 +44,11 @@ function extractSourceMap(source, map, destFilePath, mapFilePath) {
       mappings.push({
         startPos: match.index,
         endPos: match.index + match[0].length,
-        info: parseMappingInfo(match[1])
+        info: {
+          file: match[1],
+          line: parseInt(match[2], 10),
+          column: parseInt(match[3], 10) - 1
+        }
       });
     }
 
