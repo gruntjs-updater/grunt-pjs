@@ -6,13 +6,6 @@ var pth = require('path');
 
 var SourceMapGenerator = sourceMap.SourceMapGenerator;
 
-var kEmptyLinePattern = /^\s*$/;
-var kLineMarkerPattern = /^# (\d+) "(.+)"([\d\s]*)$/;
-var kLexPattern = /(['"])|\/([\/*])|(\*\/)|([$a-z_][$\w]*)|(\.?\d[x\da-f\+\-]*)|\{/ig;
-var kInvalidQuotePattern = /^[^\/]?\/$/;
-
-var kKeywords = arrayToObject('break case catch continue debugger default delete do else finally for function if in instanceof new return switch this throw try typeof var void while with'.split(' '));
-
 function relativePath(from, to) {
   var fromDir = pth.dirname(from);
   var toDir = pth.dirname(to);
@@ -30,102 +23,106 @@ function arrayToObject(arr) {
   return obj;
 }
 
+var kKeywords = arrayToObject('break case catch continue debugger default delete do else finally for function if in instanceof new return switch this throw try typeof var void while with'.split(' '));
+var kMappingInfoPattern = /\{(P:[^{}]+)\}/g;
+var kIndentPattern = /^[^{]*/;
+var kSymbolPattern = /^[$_a-z][$\w]*/i;
+
+function parseMappingInfo(str) {
+
+  var info = {};
+
+  str.split(';').forEach(function(kv) {
+    var index = kv.indexOf(':');
+    var key = kv.substr(0, index);
+    var value = kv.substr(index + 1);
+    switch (key) {
+      case 'P':
+        info.file = value;
+        break;
+      case 'L':
+        info.line = parseInt(value, 10);
+        break;
+      case 'C':
+        info.column = parseInt(value, 10) - 1;
+        break;
+    }
+  });
+
+  return info;
+
+}
+
 function extractSourceMap(source, map, destFilePath, mapFilePath) {
 
+  var sourcePathCache = {};
   var lines = [];
-  var sourceStack = [];
-  var currentSource = null;
-  var inComment = false;
-  var inQuote = false;
 
-  source.split(/\n/).forEach(function(line) {
+  source.split('\n').forEach(function(rawLine) {
 
-    var match = kLineMarkerPattern.exec(line);
-    if (match) {
-      var linenum = parseInt(match[1], 10);
-      var filename = match[2];
-      var flags = arrayToObject(match[3].split(/\s+/));
-      if (flags[1]) {
-        sourceStack.push(currentSource = {
-          filename: filename
-        });
-      } else if (flags[2]) {
-        sourceStack.pop();
-        currentSource = sourceStack[sourceStack.length - 1];
-      }
-      if (currentSource) {
-        // console.assert(currentSource.filename == filename);
-        // console.assert(currentSource.linenum == linenum, lines.length, currentSource, linenum);
-        currentSource.linenum = linenum;
-      }
+    var line = kIndentPattern.exec(rawLine)[0];
+    var mappings = [];
+
+    kMappingInfoPattern.lastIndex = line.length;
+
+    for (var match; match = kMappingInfoPattern.exec(rawLine); ) {
+      mappings.push({
+        startPos: match.index,
+        endPos: match.index + match[0].length,
+        info: parseMappingInfo(match[1])
+      });
+    }
+
+    if (mappings.length == 0) {
+      lines.push(rawLine);
       return;
     }
 
-    if (!kEmptyLinePattern.test(line)) {
+    mappings.push({
+      startPos: rawLine.length
+    });
 
-      lines.push(line);
+    for (var i = 0; i < mappings.length - 1; i++) {
 
-      // Sadly learned that even the generated line is identical to the source,
-      // source map requires a mapping before each symbol, so this is a simple
-      // parser to find out all necessary tokens.
-      // Note: Expect errors! This parser is not fully context aware. Eg.
-      //   keyword as object key will not be outputted, etc.
-      for (kLexPattern.lastIndex = 0; match = kLexPattern.exec(line); ) {
-        if (inComment) {
-          if (match[3])
-            inComment = false;
-          continue;
-        }
-        if (inQuote) {
-          if (match[1] == inQuote &&
-              !kInvalidQuotePattern.test(line.substring(match.index - 2, match.index)))
-            inQuote = false;
-          continue;
-        }
-        // Not in a string nor a comment
-        // Check if starts a string
-        if (match[1]) {
-          if (!kInvalidQuotePattern.test(line.substring(match.index - 2, match.index)))
-            inQuote = match[1];
-        // Check if starts a comment
-        } else if (match[2]) {
-          if (match[2] == '\/')
-            break;
-          inComment = true;
-          continue;
-        }
-        var name = null;
-        if (match[4]) {
-          name = match[4];
-          if (kKeywords[name])
-            name = null;
-        }
-        if (name !== false) {
-          map.addMapping({
-            generated: {
-              line: lines.length,
-              column: match.index
-            },
-            source: relativePath(mapFilePath, currentSource.filename),
-            original: {
-              line: currentSource.linenum,
-              column: match.index
-            },
-            name: name
-          });
+      var token = rawLine.substring(mappings[i].endPos, mappings[i + 1].startPos);
+      var mappingInfo = mappings[i].info;
+
+      var symbol = kSymbolPattern.exec(token);
+      if (symbol) {
+        symbol = symbol[0];
+        if (kKeywords[symbol]) {
+          symbol = null;
         }
       }
 
+      map.addMapping({
+        generated: {
+          line: lines.length + 1,
+          column: line.length
+        },
+        source: sourcePath(mappingInfo.file),
+        original: mappingInfo,
+        name: symbol
+      });
+
+      line += token;
+
     }
 
-    if (currentSource)
-      currentSource.linenum++;
+    lines.push(line);
 
   });
 
   lines.push('//# sourceMappingURL=' + relativePath(destFilePath, mapFilePath));
 
   return lines.join('\n');
+
+  function sourcePath(to) {
+    if (!sourcePathCache[to])
+      sourcePathCache[to] = relativePath(mapFilePath, to);
+    return sourcePathCache[to];
+  }
+
 }
 
 module.exports = function(grunt) {
@@ -148,13 +145,14 @@ grunt.registerMultiTask('pjs', 'Compile preprocess js to plain js.', function() 
     binName += '-' + options.cppVersion;
 
   var baseArgs = [
+    '-P',
     '-C',
     '-w',
     '-undef'
   ];
 
-  if (!options.sourceMap)
-    baseArgs.push('-P');
+  if (options.sourceMap)
+    baseArgs.push('-fdebug-cpp', '-E');
 
   options.includePaths.forEach(function(path) {
     baseArgs.push('-I', path);
