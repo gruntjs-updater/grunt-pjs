@@ -13,7 +13,7 @@ function relativePath(from, to) {
   if (fromDir !== toDir)
     res = pth.relative(fromDir, toDir) + pth.sep + res;
   return res;
-};
+}
 
 function arrayToObject(arr) {
   var obj = {};
@@ -40,7 +40,7 @@ function extractSourceMap(source, map, destFilePath, mapFilePath) {
 
     kMappingInfoPattern.lastIndex = line.length;
 
-    for (var match; match = kMappingInfoPattern.exec(rawLine); ) {
+    for (var match; (match = kMappingInfoPattern.exec(rawLine)); ) {
       mappings.push({
         startPos: match.index,
         endPos: match.index + match[0].length,
@@ -52,7 +52,7 @@ function extractSourceMap(source, map, destFilePath, mapFilePath) {
       });
     }
 
-    if (mappings.length == 0) {
+    if (mappings.length === 0) {
       lines.push(rawLine);
       return;
     }
@@ -106,105 +106,105 @@ function extractSourceMap(source, map, destFilePath, mapFilePath) {
 
 module.exports = function(grunt) {
 
-grunt.registerMultiTask('pjs', 'Compile preprocess js to plain js.', function() {
+  grunt.registerMultiTask('pjs', 'Compile preprocess js to plain js.', function() {
 
-  var options = this.options({
-    cppVersion: 4.8,
-    basePath: null,
-    includePaths: [],
-    includeFiles: [],
-    definations: [],
-    sourceMap: false,
-    sourceRoot: null,
-    args: null
-  });
+    var options = this.options({
+      cppVersion: 4.8,
+      basePath: null,
+      includePaths: [],
+      includeFiles: [],
+      definations: [],
+      sourceMap: false,
+      sourceRoot: null,
+      args: null
+    });
 
-  var binName = 'cpp';
-  if (options.cppVersion)
-    binName += '-' + options.cppVersion;
+    var binName = 'cpp';
+    if (options.cppVersion)
+      binName += '-' + options.cppVersion;
 
-  var baseArgs = [
-    '-P',
-    '-C',
-    '-w',
-    '-undef'
-  ];
+    var baseArgs = [
+      '-P',
+      '-C',
+      '-w',
+      '-undef'
+    ];
 
-  if (options.sourceMap)
-    baseArgs.push('-fdebug-cpp', '-E');
+    if (options.sourceMap)
+      baseArgs.push('-fdebug-cpp', '-E');
 
-  options.includePaths.forEach(function(path) {
-    baseArgs.push('-I', path);
-  });
+    options.includePaths.forEach(function(path) {
+      baseArgs.push('-I', path);
+    });
 
-  options.includeFiles.forEach(function(path) {
-    baseArgs.push('-include', path);
-  });
+    options.includeFiles.forEach(function(path) {
+      baseArgs.push('-include', path);
+    });
 
-  options.definations.forEach(function(def) {
-    if (typeof def == 'object') {
-      baseArgs.push('-D', def.name + '=' + def.value);
-    } else {
-      baseArgs.push('-D', def);
-    }
-  });
+    options.definations.forEach(function(def) {
+      if (typeof def == 'object') {
+        baseArgs.push('-D', def.name + '=' + def.value);
+      } else {
+        baseArgs.push('-D', def);
+      }
+    });
 
-  if (options.args)
-    baseArgs.push.apply(baseArgs, options.args);
+    if (options.args)
+      baseArgs.push.apply(baseArgs, options.args);
 
-  var done = this.async();
+    var done = this.async();
 
-  async.each(this.files, function(file, callback) {
+    async.each(this.files, function(file, callback) {
 
-    var srcFiles = file.src;
-    var basePath = options.basePath;
-    if (basePath)
-      srcFiles = srcFiles.map(function(path) {
-        return pth.relative(basePath, path);
+      var srcFiles = file.src;
+      var basePath = options.basePath;
+      if (basePath)
+        srcFiles = srcFiles.map(function(path) {
+          return pth.relative(basePath, path);
+        });
+
+      var args = baseArgs.concat(srcFiles);
+      var proc = chproc.spawn(binName, args, {
+        cwd: basePath
       });
 
-    var args = baseArgs.concat(srcFiles);
-    var proc = chproc.spawn(binName, args, {
-      cwd: basePath
-    });
+      var out = [];
+      var err = [];
+      proc.stdout.on('data', function(data) {
+        out.push(data);
+      });
+      proc.stderr.on('data', function(data) {
+        err.push(data);
+      });
 
-    var out = [];
-    var err = [];
-    proc.stdout.on('data', function(data) {
-      out.push(data);
-    });
-    proc.stderr.on('data', function(data) {
-      err.push(data);
-    });
+      proc.on('close', function(code) {
+        err = Buffer.concat(err).toString('utf8');
+        if (code)
+          return callback(new Error(err));
+        if (err)
+          grunt.warn(err);
 
-    proc.on('close', function(code) {
-      err = Buffer.concat(err).toString('utf8');
-      if (code)
-        return callback(new Error(err));
-      if (err)
-        grunt.warn(err);
+        out = Buffer.concat(out).toString('utf8');
 
-      out = Buffer.concat(out).toString('utf8');
+        if (options.sourceMap) {
+          var mapFilePath = file.dest + '.map';
+          var map = new SourceMapGenerator({
+            file: relativePath(mapFilePath, file.dest),
+            sourceRoot: options.sourceRoot
+          });
+          out = extractSourceMap(out, map, file.dest, mapFilePath);
+          grunt.file.write(file.dest, out);
+          grunt.file.write(mapFilePath, map.toString());
+          grunt.log.writeln('File ' + chalk.cyan(mapFilePath) + ' created (source map).');
+        } else {
+          grunt.file.write(file.dest, out);
+        }
+        grunt.log.writeln('File ' + chalk.cyan(file.dest) + ' created.');
+        callback();
+      });
 
-      if (options.sourceMap) {
-        var mapFilePath = file.dest + '.map';
-        var map = new SourceMapGenerator({
-          file: relativePath(mapFilePath, file.dest),
-          sourceRoot: options.sourceRoot
-        });
-        out = extractSourceMap(out, map, file.dest, mapFilePath);
-        grunt.file.write(file.dest, out);
-        grunt.file.write(mapFilePath, map.toString());
-        grunt.log.writeln('File ' + chalk.cyan(mapFilePath) + ' created (source map).');
-      } else {
-        grunt.file.write(file.dest, out);
-      }
-      grunt.log.writeln('File ' + chalk.cyan(file.dest) + ' created.');
-      callback();
-    });
+    }, done);
 
-  }, done);
-
-});
+  });
 
 };
