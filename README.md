@@ -1,4 +1,5 @@
-# grunt-pjs
+# grunt-pjs [![NPM version](https://badge.fury.io/js/grunt-pjs.png)](http://badge.fury.io/js/grunt-pjs) [![Dependencies](https://david-dm.org/ashi009/grunt-pjs.png)](https://david-dm.org/ashi009/grunt-pjs)
+
 
 Preprocess JS build task for Grunt
 
