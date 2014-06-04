@@ -1,3 +1,4 @@
+var os = require('os');
 var async = require('async');
 var sourceMap = require('source-map');
 var chproc = require('child_process');
@@ -154,7 +155,7 @@ module.exports = function(grunt) {
 
     var done = this.async();
 
-    async.each(this.files, function(file, callback) {
+    async.forEachLimit(this.files, os.cpus().length, function(file, callback) {
 
       var srcFiles = file.src;
       var basePath = options.basePath;
